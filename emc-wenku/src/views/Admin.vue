@@ -1,6 +1,14 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { categories, periods } from '../utils/constants'
+import {
+  createEmptySource,
+  LITERATURE_SCHEMA_VERSION,
+  validateLiteratureCollection,
+  validateLiteratureRecord,
+  verificationStatuses,
+  visibilityOptions,
+} from '../utils/literatureSchema'
 import { useAppStore } from '../store/useAppStore'
 
 const { literatureList, saveLiterature, deleteLiterature, replaceLiterature } = useAppStore()
@@ -10,9 +18,25 @@ const editingId = ref('')
 const formError = ref('')
 const importMessage = ref('')
 const importIsError = ref(false)
+const tableKeyword = ref('')
 const totalViews = computed(() =>
   literatureList.value.reduce((sum, item) => sum + (Number(item.views) || 0), 0),
 )
+const visibleLiterature = computed(() => {
+  const keyword = tableKeyword.value.trim().toLocaleLowerCase()
+  if (!keyword) return literatureList.value
+  return literatureList.value.filter((item) =>
+    `${item.id} ${item.title} ${item.author}`.toLocaleLowerCase().includes(keyword),
+  )
+})
+
+function createRecordId() {
+  let id
+  do {
+    id = `EMC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+  } while (literatureList.value.some((item) => item.id === id))
+  return id
+}
 
 const emptyForm = () => ({
   title: '',
@@ -22,6 +46,7 @@ const emptyForm = () => ({
   summary: '',
   content: '',
   date: new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10),
+  source: createEmptySource(),
 })
 const form = reactive(emptyForm())
 
@@ -35,7 +60,7 @@ function openCreate() {
 function openEdit(item) {
   editingId.value = item.id
   formError.value = ''
-  Object.assign(form, { ...item })
+  Object.assign(form, { ...item, source: { ...createEmptySource(), ...item.source } })
   dialogRef.value?.showModal()
 }
 
@@ -46,18 +71,28 @@ function submitForm() {
     return
   }
 
-  const item = {
-    id: editingId.value || `EMC-${Date.now().toString(36).toUpperCase()}`,
-    title: form.title.trim(),
-    author: form.author.trim(),
-    category: form.category,
-    period: form.period,
-    summary: form.summary.trim(),
-    content: form.content.trim(),
-    date: form.date,
-    views: editingId.value
-      ? Number(literatureList.value.find((entry) => entry.id === editingId.value)?.views) || 0
-      : 0,
+  let item
+  try {
+    item = validateLiteratureRecord(
+      {
+        id: editingId.value || createRecordId(),
+        title: form.title.trim(),
+        author: form.author.trim(),
+        category: form.category,
+        period: form.period,
+        summary: form.summary.trim(),
+        content: form.content.trim(),
+        date: form.date,
+        views: editingId.value
+          ? Number(literatureList.value.find((entry) => entry.id === editingId.value)?.views) || 0
+          : 0,
+        source: { ...form.source },
+      },
+      0,
+    )
+  } catch (error) {
+    formError.value = error.message
+    return
   }
   saveLiterature(item)
   dialogRef.value?.close()
@@ -68,7 +103,12 @@ function removeItem(item) {
 }
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(literatureList.value, null, 2)], {
+  const exportPackage = {
+    schemaVersion: LITERATURE_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    literature: literatureList.value,
+  }
+  const blob = new Blob([JSON.stringify(exportPackage, null, 2)], {
     type: 'application/json;charset=utf-8',
   })
   const url = URL.createObjectURL(blob)
@@ -78,46 +118,7 @@ function exportData() {
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
-  URL.revokeObjectURL(url)
-}
-
-function validateImportedData(parsed) {
-  const rows = Array.isArray(parsed) ? parsed : parsed?.literature
-  if (!Array.isArray(rows)) throw new Error('JSON 顶层必须是文献数组，或包含 literature 数组。')
-
-  const categoryIds = new Set(categories.map((item) => item.id))
-  const periodIds = new Set(periods.map((item) => item.id))
-  const seenIds = new Set()
-
-  return rows.map((row, index) => {
-    const rowNumber = index + 1
-    if (!row || typeof row !== 'object' || Array.isArray(row))
-      throw new Error(`第 ${rowNumber} 条不是有效文献对象。`)
-
-    const item = {
-      id: String(row.id ?? '').trim(),
-      title: String(row.title ?? '').trim(),
-      author: String(row.author ?? '').trim(),
-      period: String(row.period ?? '').trim(),
-      category: String(row.category ?? '').trim(),
-      summary: String(row.summary ?? '').trim(),
-      content: String(row.content ?? '').trim(),
-      views: Number(row.views ?? 0),
-      date: String(row.date ?? '').trim(),
-    }
-
-    if (!item.id || seenIds.has(item.id)) throw new Error(`第 ${rowNumber} 条的 ID 为空或重复。`)
-    if (!item.title || !item.author || !item.summary || !item.content)
-      throw new Error(`第 ${rowNumber} 条缺少标题、作者、摘要或正文。`)
-    if (!categoryIds.has(item.category) || !periodIds.has(item.period))
-      throw new Error(`第 ${rowNumber} 条的分类或时期编号无效。`)
-    if (!Number.isFinite(item.views) || item.views < 0)
-      throw new Error(`第 ${rowNumber} 条的浏览量无效。`)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date) || Number.isNaN(Date.parse(item.date)))
-      throw new Error(`第 ${rowNumber} 条的日期格式应为 YYYY-MM-DD。`)
-    seenIds.add(item.id)
-    return item
-  })
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 async function importData(event) {
@@ -127,8 +128,17 @@ async function importData(event) {
   importMessage.value = ''
 
   try {
+    if (file.size > 10 * 1024 * 1024) throw new Error('导入文件不能超过 10 MB。')
     const parsed = JSON.parse(await file.text())
-    const items = validateImportedData(parsed)
+    if (parsed?.schemaVersion !== undefined) {
+      if (!Number.isSafeInteger(parsed.schemaVersion) || parsed.schemaVersion < 1) {
+        throw new Error('数据格式版本无效。')
+      }
+      if (parsed.schemaVersion > LITERATURE_SCHEMA_VERSION) {
+        throw new Error(`该文件使用较新的数据格式版本（${parsed.schemaVersion}），请先升级网站。`)
+      }
+    }
+    const items = validateLiteratureCollection(parsed)
     if (
       !window.confirm(
         `将用文件中的 ${items.length} 条文献替换当前全部 ${literatureList.value.length} 条数据，确定继续吗？`,
@@ -188,6 +198,16 @@ async function importData(event) {
       </p>
     </div>
 
+    <div class="admin-table-toolbar">
+      <label class="search-field admin-search">
+        <span class="sr-only">搜索后台文献</span>
+        <input v-model="tableKeyword" type="search" placeholder="按 ID、标题或作者搜索" />
+      </label>
+      <span class="muted"
+        >显示 {{ visibleLiterature.length }} / {{ literatureList.length }} 篇</span
+      >
+    </div>
+
     <div class="table-scroll">
       <table class="admin-table">
         <thead>
@@ -198,12 +218,15 @@ async function importData(event) {
             <th scope="col">分类</th>
             <th scope="col">时期</th>
             <th scope="col">发布日期</th>
+            <th scope="col">来源</th>
+            <th scope="col">核实状态</th>
+            <th scope="col">可见范围</th>
             <th scope="col">浏览量</th>
             <th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in literatureList" :key="item.id">
+          <tr v-for="item in visibleLiterature" :key="item.id">
             <td class="id-cell">{{ item.id }}</td>
             <td class="title-cell">{{ item.title }}</td>
             <td>{{ item.author }}</td>
@@ -212,6 +235,19 @@ async function importData(event) {
             </td>
             <td>{{ periods.find((entry) => entry.id === item.period)?.name ?? item.period }}</td>
             <td>{{ item.date }}</td>
+            <td>{{ item.source?.name || '未填写' }}</td>
+            <td>
+              {{
+                verificationStatuses.find((entry) => entry.id === item.source?.verificationStatus)
+                  ?.name ?? '待核实'
+              }}
+            </td>
+            <td>
+              {{
+                visibilityOptions.find((entry) => entry.id === item.source?.visibility)?.name ??
+                '公开'
+              }}
+            </td>
             <td>{{ item.views ?? 0 }}</td>
             <td>
               <div class="row-actions">
@@ -223,7 +259,10 @@ async function importData(event) {
             </td>
           </tr>
           <tr v-if="!literatureList.length">
-            <td colspan="8" class="table-empty">还没有文献，请新增或导入 JSON 数据。</td>
+            <td colspan="11" class="table-empty">还没有文献，请新增或导入 JSON 数据。</td>
+          </tr>
+          <tr v-else-if="!visibleLiterature.length">
+            <td colspan="11" class="table-empty">没有匹配的文献，请尝试其他关键词。</td>
           </tr>
         </tbody>
       </table>
@@ -264,6 +303,30 @@ async function importData(event) {
         <label>发布日期<input v-model="form.date" type="date" required /></label>
         <label>摘要<textarea v-model="form.summary" rows="3" maxlength="500" required /></label>
         <label>正文<textarea v-model="form.content" rows="9" required /></label>
+        <fieldset class="source-fieldset">
+          <legend>来源与编目状态</legend>
+          <p class="muted">可见范围仅用于编目标注；纯前端网站无法阻止访客读取已导入的内容。</p>
+          <label>来源名称<input v-model="form.source.name" maxlength="120" /></label>
+          <label>文件编号 / 引用<input v-model="form.source.identifier" maxlength="160" /></label>
+          <label>来源链接<input v-model="form.source.url" type="url" maxlength="500" /></label>
+          <div class="form-row">
+            <label
+              >核实状态<select v-model="form.source.verificationStatus">
+                <option v-for="item in verificationStatuses" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </option>
+              </select></label
+            >
+            <label
+              >可见范围<select v-model="form.source.visibility">
+                <option v-for="item in visibilityOptions" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </option>
+              </select></label
+            >
+          </div>
+          <label>编者备注<textarea v-model="form.source.note" rows="3" maxlength="1000" /></label>
+        </fieldset>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
         <div class="dialog-actions">
           <button class="button" type="button" @click="dialogRef?.close()">取消</button

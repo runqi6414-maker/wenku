@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { useAppStore } from '../store/useAppStore'
 
 const router = useRouter()
-const { searchKeyword, isDarkMode, isAdmin, toggleTheme, logout } = useAppStore()
+const { searchKeyword, favorites, isDarkMode, isAdmin, toggleTheme, logout } = useAppStore()
 
 function submitSearch() {
   router.push({
@@ -34,7 +34,9 @@ function signOut() {
       </form>
       <div class="nav-links">
         <RouterLink to="/">首页</RouterLink>
-        <RouterLink to="/profile">我的收藏</RouterLink>
+        <RouterLink to="/profile" class="favorites-link">
+          我的收藏<span v-if="favorites.length" class="nav-count">{{ favorites.length }}</span>
+        </RouterLink>
         <RouterLink to="/admin">后台管理</RouterLink>
         <button v-if="isAdmin" class="button button-quiet" type="button" @click="signOut">
           退出管理

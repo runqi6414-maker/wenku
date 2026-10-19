@@ -1,38 +1,33 @@
-# emc-wenku
+# EarthMC 国区玩家文库
 
-This template should help get you started developing with Vue 3 in Vite.
+基于 Vue 3、Vue Router 和 Vite 的玩家文献目录与阅读前端。数据保存在当前浏览器的 `localStorage` 中，JSON 导入和导出用于备份、迁移文献。
 
-## Recommended IDE Setup
+## 本地运行
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+需要 Node.js 22.18 或更高版本。
 
 ```sh
 npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
 npm run dev
 ```
 
-### Compile and Minify for Production
+生产构建与本地预览：
 
 ```sh
 npm run build
+npm run preview
 ```
+
+## 功能
+
+- 按标题、作者、摘要搜索，按文献分类和历史时期筛选，并分页浏览。
+- 查看文献详情、阅读量、来源与核实状态；收藏和复制引用。
+- 管理员演示入口支持文献增删改、JSON 导入导出及后台检索。
+- 浅色/深色主题、响应式移动布局。
+
+## 数据与安全说明
+
+- 首次打开时文库为空。管理员可在后台新增文献，或导入符合 `src/utils/literatureSchema.js` 校验规则的 JSON。
+- 页面内容和管理员演示状态保存在本机浏览器，不会自动同步给其他访客。清除浏览器网站数据会清除这些记录；请定期导出 JSON 备份。
+- 演示账号为 `admin`，密码为 `emc-wenku`。这是前端演示登录，不具备服务器端鉴权能力，不可用于保护生产环境中的敏感文献。
+- `local-data/` 被 Git 忽略，用于保存本地测试导入文件。部署前请确认待发布数据拥有公开授权，且不包含受限资料。

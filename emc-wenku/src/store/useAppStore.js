@@ -2,19 +2,29 @@ import { computed, ref, watch } from 'vue'
 import { initialData } from '../utils/mockData'
 import { STORAGE_KEYS } from '../utils/constants'
 import { readFlag, readStorage, writeFlag, writeStorage } from '../utils/storage'
+import { normalizeLiteratureRecord } from '../utils/literatureSchema'
 
 function readLiterature() {
   const saved = readStorage(STORAGE_KEYS.literature, null)
-  return Array.isArray(saved) ? saved : initialData.map((item) => ({ ...item }))
+  const records = Array.isArray(saved) ? saved : initialData
+  return records.flatMap((record, index) => {
+    try {
+      return [normalizeLiteratureRecord(record)]
+    } catch (error) {
+      console.warn(`Skipping invalid stored literature record ${index + 1}`, error)
+      return []
+    }
+  })
 }
 
-function readFavorites() {
+function readFavorites(availableIds) {
   const saved = readStorage(STORAGE_KEYS.favorites, [])
-  return Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : []
+  if (!Array.isArray(saved)) return []
+  return [...new Set(saved.filter((id) => typeof id === 'string' && availableIds.has(id)))]
 }
 
 const literatureList = ref(readLiterature())
-const favorites = ref(readFavorites())
+const favorites = ref(readFavorites(new Set(literatureList.value.map((item) => item.id))))
 const searchKeyword = ref('')
 const isDarkMode = ref(readStorage(STORAGE_KEYS.theme, 'light') === 'dark')
 const adminStatus = ref(readFlag(STORAGE_KEYS.adminStatus))
@@ -51,9 +61,10 @@ function incrementViews(id) {
 }
 
 function saveLiterature(item) {
+  const record = { ...item, source: { ...item.source } }
   const index = literatureList.value.findIndex((entry) => entry.id === item.id)
-  if (index === -1) literatureList.value.unshift({ ...item })
-  else literatureList.value.splice(index, 1, { ...item })
+  if (index === -1) literatureList.value.unshift(record)
+  else literatureList.value.splice(index, 1, record)
 }
 
 function deleteLiterature(id) {
@@ -62,7 +73,7 @@ function deleteLiterature(id) {
 }
 
 function replaceLiterature(items) {
-  literatureList.value = items.map((item) => ({ ...item }))
+  literatureList.value = items.map(normalizeLiteratureRecord)
   const ids = new Set(literatureList.value.map((item) => item.id))
   favorites.value = favorites.value.filter((id) => ids.has(id))
 }

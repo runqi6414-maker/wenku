@@ -11,6 +11,10 @@ const { favorites, toggleFavorite } = useAppStore()
     <div class="tag-row">
       <span class="tag">{{ getCategoryName(litItem.category) }}</span
       ><span class="tag">{{ getPeriodName(litItem.period) }}</span>
+      <span v-if="litItem.source?.visibility === 'internal'" class="tag tag-internal"
+        >内部标记</span
+      >
+      <span v-if="litItem.source?.verificationStatus === 'needs-review'" class="tag">待复核</span>
     </div>
     <h2>
       <RouterLink :to="`/detail/${litItem.id}`">{{ litItem.title }}</RouterLink>

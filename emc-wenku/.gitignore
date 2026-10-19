@@ -35,5 +35,8 @@ coverage
 # Vitest
 __screenshots__/
 
+# Private, local-only archive fixtures
+local-data/
+
 # Vite
 *.timestamp-*-*.mjs

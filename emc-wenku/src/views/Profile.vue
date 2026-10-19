@@ -5,7 +5,10 @@ import { useAppStore } from '../store/useAppStore'
 
 const { literatureList, favorites, clearFavorites } = useAppStore()
 const savedItems = computed(() =>
-  literatureList.value.filter((item) => favorites.value.includes(item.id)),
+  [...favorites.value]
+    .reverse()
+    .map((id) => literatureList.value.find((item) => item.id === id))
+    .filter(Boolean),
 )
 
 function clearAll() {

@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import LitCard from '../components/LitCard.vue'
 import Pagination from '../components/Pagination.vue'
 import SideBar from '../components/SideBar.vue'
+import { categories, periods } from '../utils/constants'
 import { useAppStore } from '../store/useAppStore'
 
 const route = useRoute()
+const router = useRouter()
 const { literatureList, searchKeyword } = useAppStore()
 const selectedCategory = ref('')
 const selectedPeriod = ref('')
@@ -36,6 +38,23 @@ const filteredList = computed(() => {
 const paginatedList = computed(() =>
   filteredList.value.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize),
 )
+const hasActiveFilters = computed(() =>
+  Boolean(searchKeyword.value.trim() || selectedCategory.value || selectedPeriod.value),
+)
+const activeCategoryName = computed(
+  () => categories.find((item) => item.id === selectedCategory.value)?.name ?? '',
+)
+const activePeriodName = computed(
+  () => periods.find((item) => item.id === selectedPeriod.value)?.name ?? '',
+)
+
+function clearFilters() {
+  searchKeyword.value = ''
+  selectedCategory.value = ''
+  selectedPeriod.value = ''
+  filtersOpen.value = false
+  if (route.query.q) router.replace({ name: 'home' })
+}
 watch([searchKeyword, selectedCategory, selectedPeriod], () => (currentPage.value = 1))
 watch(
   () => filteredList.value.length,
@@ -51,12 +70,14 @@ watch(
       <button
         class="button filter-toggle"
         type="button"
+        aria-controls="home-filter-panel"
         :aria-expanded="filtersOpen"
         @click="filtersOpen = !filtersOpen"
       >
         {{ filtersOpen ? '收起筛选' : '分类与时期筛选' }}
       </button>
       <SideBar
+        id="home-filter-panel"
         :class="{ 'filter-panel-closed': !filtersOpen }"
         :selected-category="selectedCategory"
         :selected-period="selectedPeriod"
@@ -72,13 +93,35 @@ watch(
           <p class="muted">整理与检索 EarthMC 国区玩家的历史文献。</p>
         </div>
       </div>
-      <p class="muted">共找到 {{ filteredList.length }} 篇文献</p>
+      <div class="catalogue-toolbar" aria-live="polite">
+        <p class="muted">
+          共找到 <strong>{{ filteredList.length }}</strong> 篇文献
+          <span v-if="hasActiveFilters">（筛选条件已生效）</span>
+        </p>
+        <button v-if="hasActiveFilters" class="text-button" type="button" @click="clearFilters">
+          清除全部筛选
+        </button>
+      </div>
+      <div v-if="hasActiveFilters" class="active-filters" aria-label="当前筛选条件">
+        <span v-if="searchKeyword.trim()" class="tag">搜索：{{ searchKeyword.trim() }}</span>
+        <span v-if="activeCategoryName" class="tag">分类：{{ activeCategoryName }}</span>
+        <span v-if="activePeriodName" class="tag">时期：{{ activePeriodName }}</span>
+      </div>
       <div v-if="paginatedList.length" class="literature-grid">
         <LitCard v-for="item in paginatedList" :key="item.id" :lit-item="item" />
       </div>
       <div v-else class="empty-state">
         <h2>暂时没有文献</h2>
-        <p>可以更换筛选条件，或在后台添加文献。</p>
+        <p>
+          {{
+            hasActiveFilters
+              ? '没有符合当前筛选条件的结果。'
+              : '文库暂时为空，可以在后台添加文献或导入数据。'
+          }}
+        </p>
+        <button v-if="hasActiveFilters" class="button" type="button" @click="clearFilters">
+          清除筛选条件
+        </button>
       </div>
       <Pagination
         :total="filteredList.length"
