@@ -18,6 +18,12 @@ npm run build
 npm run preview
 ```
 
+## 部署到 GitHub Pages
+
+仓库的 `main` 分支更新后，GitHub Actions 会构建并部署 `emc-wenku/` 网站。首次部署前，请在仓库 **Settings → Pages → Build and deployment → Source** 中选择 **GitHub Actions**。部署完成后访问 <https://runqi6414-maker.github.io/wenku/>。
+
+GitHub Pages 是公开静态网站。文献数据保存在访问者自己的浏览器中；请勿把未获公开授权的文献放入发布包。
+
 ## 功能
 
 - 按标题、作者、摘要搜索，按文献分类和历史时期筛选，并分页浏览。

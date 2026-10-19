@@ -6,10 +6,9 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    vue(),
-    vueDevTools(),
-  ],
+  // GitHub Pages hosts this repository under /wenku/; local dev keeps the root path.
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/wenku/' : '/',
+  plugins: [vue(), vueDevTools()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
