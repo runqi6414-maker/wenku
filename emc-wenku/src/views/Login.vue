@@ -1,7 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DEMO_ADMIN } from '../utils/constants'
 import { useAppStore } from '../store/useAppStore'
 
 const route = useRoute()
@@ -9,30 +8,37 @@ const router = useRouter()
 const { login } = useAppStore()
 const form = reactive({ username: '', password: '' })
 const errorMessage = ref('')
+const submitting = ref(false)
 
-function submitLogin() {
-  if (form.username !== DEMO_ADMIN.username || form.password !== DEMO_ADMIN.password) {
-    errorMessage.value = '账号或密码不正确。'
-    return
-  }
-
+async function submitLogin() {
+  submitting.value = true
   errorMessage.value = ''
-  login()
-  const redirect = route.query.redirect
-  const safeRedirect =
-    typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
-  router.replace(safeRedirect ? redirect : { name: 'admin' })
+  try {
+    await login(form)
+    const redirect = route.query.redirect
+    const safeRedirect =
+      typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    router.replace(safeRedirect ? redirect : { name: 'home' })
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
 <template>
   <section class="form-panel login-panel">
-    <p class="eyebrow">ADMINISTRATION</p>
-    <h1>管理员登录</h1>
-    <p class="muted">这是纯前端演示登录，不提供真实身份验证。</p>
+    <p class="eyebrow">ACCOUNT</p>
+    <h1>登录文库</h1>
+    <p class="muted">登录后可以投稿、查看审核进度并管理收藏。</p>
     <form class="stack-form" @submit.prevent="submitLogin">
       <label
-        >管理员账号<input v-model.trim="form.username" autocomplete="username" required
+        >用户名或邮箱<input
+          v-model.trim="form.username"
+          autocomplete="username"
+          required
+          maxlength="254"
       /></label>
       <label
         >密码<input
@@ -40,10 +46,14 @@ function submitLogin() {
           type="password"
           autocomplete="current-password"
           required
+          maxlength="128"
       /></label>
       <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-      <button class="button button-primary" type="submit">登录后台</button>
+      <button class="button button-primary" type="submit" :disabled="submitting">
+        {{ submitting ? '正在登录…' : '登录' }}
+      </button>
     </form>
-    <p class="demo-hint">演示账号：<code>admin</code>　演示密码：<code>emc-wenku</code></p>
+    <p class="muted"><RouterLink to="/forgot-password">忘记密码？</RouterLink></p>
+    <p class="muted">还没有账户？<RouterLink to="/register">注册</RouterLink></p>
   </section>
 </template>

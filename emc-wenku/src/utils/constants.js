@@ -22,17 +22,5 @@ export const periods = [
   { id: '10', name: '【Nostra】多极竞争' },
 ]
 
-export const STORAGE_KEYS = {
-  literature: 'emc_literature',
-  favorites: 'emc_favorites',
-  theme: 'emc_theme',
-  adminStatus: 'emc_admin_status',
-}
-
 export const getCategoryName = (id) => categories.find((item) => item.id === id)?.name ?? '未分类'
 export const getPeriodName = (id) => periods.find((item) => item.id === id)?.name ?? '时期未标注'
-
-export const DEMO_ADMIN = {
-  username: 'admin',
-  password: 'emc-wenku',
-}

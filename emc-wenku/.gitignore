@@ -13,6 +13,14 @@ dist
 dist-ssr
 coverage
 *.local
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/dist
+backend/*.tsbuildinfo
 
 # Editor directories and files
 .vscode/*

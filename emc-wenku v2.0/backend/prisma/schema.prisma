@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  REVIEWER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum LiteratureStatus {
+  PUBLISHED
+  WITHDRAWN
+  HIDDEN
+}
+
+enum SubmissionType {
+  NEW_LITERATURE
+  REVISION
+}
+
+enum SubmissionStatus {
+  DRAFT
+  PENDING
+  IN_REVIEW
+  REVISION_REQUESTED
+  APPROVED
+  PUBLISHED
+  REJECTED
+  WITHDRAWN
+}
+
+enum MetaDocumentStatus {
+  DRAFT
+  CURRENT
+  SUPERSEDED
+  WITHDRAWN
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.Uuid
+  username        String         @unique @db.VarChar(32)
+  email           String?        @unique @db.VarChar(254)
+  passwordHash    String         @map("password_hash")
+  role            UserRole       @default(USER)
+  status          UserStatus     @default(ACTIVE)
+  emailVerifiedAt DateTime?      @map("email_verified_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  lastLoginAt     DateTime?      @map("last_login_at")
+  sessions        UserSession[]
+  submissions     Submission[]   @relation("Submitter")
+  reviews         ReviewRecord[]
+  favorites       Favorite[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model Category {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(2)
+  name        String       @db.VarChar(64)
+  sortOrder   Int          @default(0) @map("sort_order")
+  active      Boolean      @default(true)
+  literature  Literature[]
+  submissions Submission[]
+
+  @@map("categories")
+}
+
+model Period {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(2)
+  name        String       @db.VarChar(128)
+  sortOrder   Int          @default(0) @map("sort_order")
+  active      Boolean      @default(true)
+  literature  Literature[]
+  submissions Submission[]
+
+  @@map("periods")
+}
+
+model Literature {
+  id                String              @id @default(uuid()) @db.Uuid
+  publicCode        String              @unique @map("public_code") @db.VarChar(32)
+  slug              String?             @unique @db.VarChar(180)
+  title             String              @db.VarChar(240)
+  authorName        String              @map("author_name") @db.VarChar(160)
+  authorUserId      String?             @map("author_user_id") @db.Uuid
+  categoryId        String              @map("category_id") @db.Uuid
+  periodId          String?             @map("period_id") @db.Uuid
+  summary           String              @db.Text
+  content           String              @db.Text
+  sourceDescription String              @map("source_description") @db.Text
+  sourceUrl         String?             @map("source_url") @db.Text
+  createdAtSource   String?             @map("created_at_source") @db.VarChar(80)
+  eventStartDate    DateTime?           @map("event_start_date") @db.Date
+  eventEndDate      DateTime?           @map("event_end_date") @db.Date
+  publishedAt       DateTime?           @map("published_at")
+  status            LiteratureStatus    @default(PUBLISHED)
+  viewCount         BigInt              @default(0) @map("view_count")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  category          Category            @relation(fields: [categoryId], references: [id])
+  period            Period?             @relation(fields: [periodId], references: [id])
+  versions          LiteratureVersion[]
+  favorites         Favorite[]
+  submissions       Submission[]
+  views             PageViewEvent[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId, periodId])
+  @@map("literature")
+}
+
+model LiteratureVersion {
+  id           String     @id @default(uuid()) @db.Uuid
+  literatureId String     @map("literature_id") @db.Uuid
+  version      Int
+  title        String     @db.VarChar(240)
+  authorName   String     @map("author_name") @db.VarChar(160)
+  summary      String     @db.Text
+  content      String     @db.Text
+  snapshot     Json
+  changeNote   String     @map("change_note") @db.Text
+  createdById  String?    @map("created_by_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  literature   Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@unique([literatureId, version])
+  @@map("literature_versions")
+}
+
+model Submission {
+  id                    String              @id @default(uuid()) @db.Uuid
+  submitterId           String              @map("submitter_id") @db.Uuid
+  submissionType        SubmissionType      @default(NEW_LITERATURE) @map("submission_type")
+  targetLiteratureId    String?             @map("target_literature_id") @db.Uuid
+  title                 String              @db.VarChar(240)
+  authorName            String              @map("author_name") @db.VarChar(160)
+  categoryId            String              @map("category_id") @db.Uuid
+  periodId              String?             @map("period_id") @db.Uuid
+  summary               String              @db.Text
+  content               String              @db.Text
+  sourceDescription     String              @map("source_description") @db.Text
+  sourceUrl             String?             @map("source_url") @db.Text
+  sourceDate            String?             @map("source_date") @db.VarChar(80)
+  declarationAcceptedAt DateTime?           @map("declaration_accepted_at")
+  status                SubmissionStatus    @default(DRAFT)
+  submittedAt           DateTime?           @map("submitted_at")
+  reviewedAt            DateTime?           @map("reviewed_at")
+  reviewerId            String?             @map("reviewer_id") @db.Uuid
+  publishedLiteratureId String?             @map("published_literature_id") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  submitter             User                @relation("Submitter", fields: [submitterId], references: [id])
+  category              Category            @relation(fields: [categoryId], references: [id])
+  period                Period?             @relation(fields: [periodId], references: [id])
+  targetLiterature      Literature?         @relation(fields: [targetLiteratureId], references: [id])
+  versions              SubmissionVersion[]
+  reviews               ReviewRecord[]
+
+  @@index([status, submittedAt])
+  @@index([submitterId, updatedAt])
+  @@map("submissions")
+}
+
+model SubmissionVersion {
+  id           String         @id @default(uuid()) @db.Uuid
+  submissionId String         @map("submission_id") @db.Uuid
+  version      Int
+  snapshot     Json
+  changeNote   String         @map("change_note") @db.Text
+  createdById  String         @map("created_by_id") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at")
+  submission   Submission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviews      ReviewRecord[]
+
+  @@unique([submissionId, version])
+  @@map("submission_versions")
+}
+
+model ReviewRecord {
+  id                  String             @id @default(uuid()) @db.Uuid
+  submissionId        String             @map("submission_id") @db.Uuid
+  submissionVersionId String?            @map("submission_version_id") @db.Uuid
+  reviewerId          String             @map("reviewer_id") @db.Uuid
+  fromStatus          SubmissionStatus?  @map("from_status")
+  toStatus            SubmissionStatus   @map("to_status")
+  comment             String             @db.Text
+  isFinal             Boolean            @default(false) @map("is_final")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  submission          Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submissionVersion   SubmissionVersion? @relation(fields: [submissionVersionId], references: [id])
+  reviewer            User               @relation(fields: [reviewerId], references: [id])
+
+  @@index([submissionId, createdAt])
+  @@map("review_records")
+}
+
+model Favorite {
+  userId       String     @map("user_id") @db.Uuid
+  literatureId String     @map("literature_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  literature   Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@id([userId, literatureId])
+  @@map("favorites")
+}
+
+model MetaDocumentCategory {
+  id        String         @id @default(uuid()) @db.Uuid
+  code      String         @unique @db.VarChar(3)
+  name      String         @db.VarChar(80)
+  documents MetaDocument[]
+
+  @@map("meta_document_categories")
+}
+
+model MetaDocument {
+  id             String                @id @default(uuid()) @db.Uuid
+  slug           String                @unique @db.VarChar(180)
+  title          String                @db.VarChar(240)
+  categoryId     String                @map("category_id") @db.Uuid
+  summary        String                @db.Text
+  status         MetaDocumentStatus    @default(DRAFT)
+  currentVersion Int                   @default(0) @map("current_version")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  category       MetaDocumentCategory  @relation(fields: [categoryId], references: [id])
+  versions       MetaDocumentVersion[]
+
+  @@map("meta_documents")
+}
+
+model MetaDocumentVersion {
+  id          String       @id @default(uuid()) @db.Uuid
+  documentId  String       @map("document_id") @db.Uuid
+  version     Int
+  content     String       @db.Text
+  changeNote  String       @map("change_note") @db.Text
+  effectiveAt DateTime?    @map("effective_at")
+  publishedAt DateTime?    @map("published_at")
+  createdById String       @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at")
+  document    MetaDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@map("meta_document_versions")
+}
+
+model PageViewEvent {
+  id           String     @id @default(uuid()) @db.Uuid
+  literatureId String     @map("literature_id") @db.Uuid
+  occurredAt   DateTime   @default(now()) @map("occurred_at")
+  visitorHash  String?    @map("visitor_hash") @db.VarChar(64)
+  literature   Literature @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@index([literatureId, occurredAt])
+  @@map("page_view_events")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(80)
+  entityType String   @map("entity_type") @db.VarChar(80)
+  entityId   String?  @map("entity_id") @db.VarChar(80)
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("audit_logs")
+}

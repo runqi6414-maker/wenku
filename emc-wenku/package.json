@@ -5,17 +5,37 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api:dev": "ts-node --project backend/tsconfig.json backend/src/main.ts",
+    "api:build": "tsc -p backend/tsconfig.json",
+    "api:start": "node backend/dist/src/main.js",
+    "db:generate": "prisma generate --schema backend/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema backend/prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema backend/prisma/schema.prisma",
+    "db:seed": "prisma db seed --schema backend/prisma/schema.prisma",
+    "admin:create": "ts-node --project backend/tsconfig.json backend/scripts/create-admin.ts",
     "build": "vite build",
     "preview": "vite preview",
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@nestjs/common": "^12.2.0",
+    "@nestjs/core": "^12.2.0",
+    "@nestjs/platform-express": "^12.2.0",
+    "@prisma/client": "^6.19.3",
+    "class-validator": "^0.15.1",
+    "pinia": "^4.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "@vitejs/plugin-vue": "^6.0.8",
     "prettier": "3.9.6",
+    "prisma": "^6.19.3",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3",
     "vite": "^8.2.2",
     "vite-plugin-vue-devtools": "^8.2.1"
   },

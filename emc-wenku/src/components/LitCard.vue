@@ -1,9 +1,19 @@
 <script setup>
 import { useAppStore } from '../store/useAppStore'
+import { useRouter } from 'vue-router'
 import { getCategoryName, getPeriodName } from '../utils/constants'
 
-defineProps({ litItem: { type: Object, required: true } })
+const props = defineProps({ litItem: { type: Object, required: true } })
 const { favorites, toggleFavorite } = useAppStore()
+const router = useRouter()
+async function favorite(id) {
+  try {
+    await toggleFavorite(id, props.litItem)
+  } catch (error) {
+    if (error.status === 401)
+      router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+  }
+}
 </script>
 
 <template>
@@ -11,13 +21,9 @@ const { favorites, toggleFavorite } = useAppStore()
     <div class="tag-row">
       <span class="tag">{{ getCategoryName(litItem.category) }}</span
       ><span class="tag">{{ getPeriodName(litItem.period) }}</span>
-      <span v-if="litItem.source?.visibility === 'internal'" class="tag tag-internal"
-        >内部标记</span
-      >
-      <span v-if="litItem.source?.verificationStatus === 'needs-review'" class="tag">待复核</span>
     </div>
     <h2>
-      <RouterLink :to="`/detail/${litItem.id}`">{{ litItem.title }}</RouterLink>
+      <RouterLink :to="`/literature/${litItem.id}`">{{ litItem.title }}</RouterLink>
     </h2>
     <p class="muted">作者：{{ litItem.author }}</p>
     <p class="summary">{{ litItem.summary }}</p>
@@ -27,7 +33,7 @@ const { favorites, toggleFavorite } = useAppStore()
         class="button button-quiet"
         type="button"
         :aria-pressed="favorites.includes(litItem.id)"
-        @click="toggleFavorite(litItem.id)"
+        @click="favorite(litItem.id)"
       >
         {{ favorites.includes(litItem.id) ? '♥ 已收藏' : '♡ 收藏' }}
       </button>

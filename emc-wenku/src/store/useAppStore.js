@@ -1,108 +1,43 @@
-import { computed, ref, watch } from 'vue'
-import { initialData } from '../utils/mockData'
-import { STORAGE_KEYS } from '../utils/constants'
-import { readFlag, readStorage, writeFlag, writeStorage } from '../utils/storage'
-import { normalizeLiteratureRecord } from '../utils/literatureSchema'
+import { ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from './auth'
+import { useLiteratureStore } from './literature'
+import { usePreferencesStore } from './preferences'
 
-function readLiterature() {
-  const saved = readStorage(STORAGE_KEYS.literature, null)
-  const records = Array.isArray(saved) ? saved : initialData
-  return records.flatMap((record, index) => {
-    try {
-      return [normalizeLiteratureRecord(record)]
-    } catch (error) {
-      console.warn(`Skipping invalid stored literature record ${index + 1}`, error)
-      return []
-    }
-  })
-}
-
-function readFavorites(availableIds) {
-  const saved = readStorage(STORAGE_KEYS.favorites, [])
-  if (!Array.isArray(saved)) return []
-  return [...new Set(saved.filter((id) => typeof id === 'string' && availableIds.has(id)))]
-}
-
-const literatureList = ref(readLiterature())
-const favorites = ref(readFavorites(new Set(literatureList.value.map((item) => item.id))))
 const searchKeyword = ref('')
-const isDarkMode = ref(readStorage(STORAGE_KEYS.theme, 'light') === 'dark')
-const adminStatus = ref(readFlag(STORAGE_KEYS.adminStatus))
-const isAdmin = computed(() => adminStatus.value)
-
-watch(literatureList, (value) => writeStorage(STORAGE_KEYS.literature, value), { deep: true })
-watch(favorites, (value) => writeStorage(STORAGE_KEYS.favorites, value), { deep: true })
-watch(
-  isDarkMode,
-  (value) => {
-    document.documentElement.classList.toggle('dark', value)
-    writeStorage(STORAGE_KEYS.theme, value ? 'dark' : 'light')
-  },
-  { immediate: true },
-)
-
-function toggleFavorite(id) {
-  favorites.value = favorites.value.includes(id)
-    ? favorites.value.filter((favoriteId) => favoriteId !== id)
-    : [...favorites.value, id]
-}
-
-function clearFavorites() {
-  favorites.value = []
-}
-
-function toggleTheme() {
-  isDarkMode.value = !isDarkMode.value
-}
-
-function incrementViews(id) {
-  const item = literatureList.value.find((entry) => entry.id === id)
-  if (item) item.views = (Number(item.views) || 0) + 1
-}
-
-function saveLiterature(item) {
-  const record = { ...item, source: { ...item.source } }
-  const index = literatureList.value.findIndex((entry) => entry.id === item.id)
-  if (index === -1) literatureList.value.unshift(record)
-  else literatureList.value.splice(index, 1, record)
-}
-
-function deleteLiterature(id) {
-  literatureList.value = literatureList.value.filter((item) => item.id !== id)
-  favorites.value = favorites.value.filter((favoriteId) => favoriteId !== id)
-}
-
-function replaceLiterature(items) {
-  literatureList.value = items.map(normalizeLiteratureRecord)
-  const ids = new Set(literatureList.value.map((item) => item.id))
-  favorites.value = favorites.value.filter((id) => ids.has(id))
-}
-
-function login() {
-  adminStatus.value = true
-  writeFlag(STORAGE_KEYS.adminStatus, true)
-}
-
-function logout() {
-  adminStatus.value = false
-  writeFlag(STORAGE_KEYS.adminStatus, false)
-}
 
 export function useAppStore() {
+  const auth = useAuthStore()
+  const literature = useLiteratureStore()
+  const preferences = usePreferencesStore()
+  const { user, isAdmin, canReview } = storeToRefs(auth)
+  const { literatureList, favorites, favoriteItems, overview, overviewLoaded, loading, error } =
+    storeToRefs(literature)
+  const { isDarkMode } = storeToRefs(preferences)
   return {
+    user,
+    isAdmin,
+    canReview,
     literatureList,
     favorites,
+    favoriteItems,
+    overview,
+    overviewLoaded,
+    loading,
+    error,
     searchKeyword,
     isDarkMode,
-    isAdmin,
-    toggleFavorite,
-    clearFavorites,
-    toggleTheme,
-    incrementViews,
-    saveLiterature,
-    deleteLiterature,
-    replaceLiterature,
-    login,
-    logout,
+    toggleTheme: preferences.toggleTheme,
+    toggleFavorite: literature.toggleFavorite,
+    clearFavorites: literature.clearFavorites,
+    loadFavorites: literature.loadFavorites,
+    loadLiterature: literature.loadLiterature,
+    getLiterature: literature.getLiterature,
+    loadOverview: literature.loadOverview,
+    incrementViews: literature.incrementViews,
+    login: auth.login,
+    register: auth.register,
+    logout: auth.logout,
+    ensureLoaded: auth.ensureLoaded,
   }
 }

@@ -1,18 +1,25 @@
 <script setup>
-import { computed } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import LitCard from '../components/LitCard.vue'
 import { useAppStore } from '../store/useAppStore'
 
-const { literatureList, favorites, clearFavorites } = useAppStore()
-const savedItems = computed(() =>
-  [...favorites.value]
-    .reverse()
-    .map((id) => literatureList.value.find((item) => item.id === id))
-    .filter(Boolean),
+const route = useRoute()
+const { user, favorites, favoriteItems, loadFavorites, clearFavorites } = useAppStore()
+const error = ref('')
+const isFavoritesPage = () => route.path.endsWith('/favorites')
+onMounted(() =>
+  loadFavorites().catch((cause) => {
+    error.value = cause.message
+  }),
 )
-
-function clearAll() {
-  if (savedItems.value.length && window.confirm('确定清空全部收藏吗？')) clearFavorites()
+async function clearAll() {
+  if (!favorites.value.length || !window.confirm('确定清空账号的全部收藏吗？')) return
+  try {
+    await clearFavorites()
+  } catch (cause) {
+    error.value = cause.message
+  }
 }
 </script>
 
@@ -20,21 +27,38 @@ function clearAll() {
   <section>
     <div class="page-heading">
       <div>
-        <p class="eyebrow">PERSONAL LIBRARY</p>
-        <h1>我的收藏</h1>
-        <p class="muted">已收藏 {{ savedItems.length }} 篇文献</p>
+        <p class="eyebrow">MY LIBRARY</p>
+        <h1>{{ isFavoritesPage() ? '我的收藏' : '个人中心' }}</h1>
+        <p class="muted">{{ user?.username }} · 收藏与投稿数据由服务端保存。</p>
       </div>
-      <button v-if="savedItems.length" class="button" type="button" @click="clearAll">
+      <button
+        v-if="isFavoritesPage() && favorites.length"
+        class="button"
+        type="button"
+        @click="clearAll"
+      >
         清空收藏
       </button>
     </div>
-    <div v-if="savedItems.length" class="literature-grid">
-      <LitCard v-for="item in savedItems" :key="item.id" :lit-item="item" />
+    <div v-if="!isFavoritesPage()" class="stats-grid">
+      <RouterLink class="stat-card" to="/submissions"
+        ><span class="muted">我的投稿</span><strong>查看记录 →</strong></RouterLink
+      ><RouterLink class="stat-card" to="/me/favorites"
+        ><span class="muted">收藏文献</span><strong>{{ favorites.length }} 篇 →</strong></RouterLink
+      ><RouterLink class="stat-card" to="/submit"
+        ><span class="muted">参与文库</span><strong>提交新文献 →</strong></RouterLink
+      >
     </div>
-    <div v-else class="empty-state">
-      <h2>还没有收藏</h2>
-      <p>在文献卡片上点击收藏，就能在这里快速找到它。</p>
-      <RouterLink class="button" to="/">浏览文库</RouterLink>
-    </div>
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <template v-if="isFavoritesPage()"
+      ><div v-if="favoriteItems.length" class="literature-grid">
+        <LitCard v-for="item in favoriteItems" :key="item.id" :lit-item="item" />
+      </div>
+      <div v-else class="empty-state">
+        <h2>还没有收藏</h2>
+        <p>登录后在文献卡片上点击收藏，可以在这里找到它们。</p>
+        <RouterLink class="button" to="/literature">浏览文库</RouterLink>
+      </div></template
+    >
   </section>
 </template>

@@ -31,8 +31,12 @@ jobs:
 
       - name: Install and build
         working-directory: emc-wenku
+        env:
+          DATABASE_URL: postgresql://ci:ci-placeholder@127.0.0.1:5432/emc_wenku_ci?schema=public
         run: |
           npm ci
+          npm run db:generate
+          npm run api:build
           npm run build
           cp dist/index.html dist/404.html
 
