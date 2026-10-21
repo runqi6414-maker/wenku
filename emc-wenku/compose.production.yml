@@ -1,7 +1,7 @@
 services:
   postgres:
-    image: postgres:17-alpine
-    pull_policy: never
+    image: ghcr.io/runqi6414-maker/wenku:postgres-17-alpine
+    pull_policy: always
     restart: unless-stopped
     environment:
       POSTGRES_DB: emc_wenku
@@ -18,12 +18,8 @@ services:
       - data
 
   api:
-    image: emc-wenku-api:production
-    pull_policy: never
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-      target: runtime
+    image: ghcr.io/runqi6414-maker/wenku:api-production
+    pull_policy: always
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -53,14 +49,8 @@ services:
       - app
 
   web:
-    image: emc-wenku-web:production
-    pull_policy: never
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-      target: runtime
-      args:
-        VITE_API_BASE_URL: /api/v1
+    image: ghcr.io/runqi6414-maker/wenku:web-production
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       api:
@@ -70,8 +60,8 @@ services:
       - edge
 
   caddy:
-    image: caddy:2-alpine
-    pull_policy: never
+    image: ghcr.io/runqi6414-maker/wenku:caddy-2-alpine
+    pull_policy: always
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
@@ -89,12 +79,8 @@ services:
       - edge
 
   migrate:
-    image: emc-wenku-migrate:production
-    pull_policy: never
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-      target: ops
+    image: ghcr.io/runqi6414-maker/wenku:migrate-production
+    pull_policy: always
     profiles: ['ops']
     environment:
       NODE_ENV: production

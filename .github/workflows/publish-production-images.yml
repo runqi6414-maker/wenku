@@ -1,0 +1,90 @@
+name: Publish production container images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'emc-wenku/**'
+      - '.github/workflows/publish-production-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/runqi6414-maker/wenku
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./emc-wenku
+          file: ./emc-wenku/Dockerfile.api
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/runqi6414-maker/wenku:api-production
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and publish web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./emc-wenku
+          file: ./emc-wenku/Dockerfile.web
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/runqi6414-maker/wenku:web-production
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+      - name: Build and publish migration image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./emc-wenku
+          file: ./emc-wenku/Dockerfile.api
+          target: ops
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/runqi6414-maker/wenku:migrate-production
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=migrate
+
+      - name: Copy PostgreSQL image to GHCR
+        run: |
+          docker pull --platform linux/amd64 postgres:17-alpine
+          docker tag postgres:17-alpine "$IMAGE:postgres-17-alpine"
+          docker push "$IMAGE:postgres-17-alpine"
+
+      - name: Copy Caddy image to GHCR
+        run: |
+          docker pull --platform linux/amd64 caddy:2-alpine
+          docker tag caddy:2-alpine "$IMAGE:caddy-2-alpine"
+          docker push "$IMAGE:caddy-2-alpine"
