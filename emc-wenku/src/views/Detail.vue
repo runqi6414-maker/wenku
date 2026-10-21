@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCategoryName, getPeriodName } from '../utils/constants'
+import { getCategoryName, getSubcategoryName } from '../utils/constants'
 import { useAppStore } from '../store/useAppStore'
+import { apiUrl } from '../services/apiClient'
 
 const route = useRoute()
 const router = useRouter()
@@ -66,7 +67,7 @@ async function copyCitation() {
     <h1>{{ item.title }}</h1>
     <div class="tag-row">
       <span class="tag">{{ getCategoryName(item.category) }}</span
-      ><span class="tag">{{ getPeriodName(item.period) }}</span>
+      ><span v-if="item.subcategory" class="tag">{{ getSubcategoryName(item.subcategory) }}</span>
     </div>
     <p class="lead">{{ item.summary }}</p>
     <aside v-if="item.source?.description || item.source?.url" class="source-note">
@@ -77,6 +78,13 @@ async function copyCitation() {
       </p>
     </aside>
     <pre class="article-content">{{ item.content }}</pre>
+    <section v-if="item.attachments?.length" class="source-note">
+      <h2>原始文件与附件</h2>
+      <ul><li v-for="file in item.attachments" :key="file.id">
+        <a :href="apiUrl(`/literature/${item.id}/attachments/${file.id}/file`)">{{ file.name }}</a>
+        · {{ (file.size / 1024 / 1024).toFixed(2) }} MB
+      </li></ul>
+    </section>
     <div class="detail-actions">
       <button
         class="button"

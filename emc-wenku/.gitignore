@@ -45,6 +45,9 @@ __screenshots__/
 
 # Private, local-only archive fixtures
 local-data/
+/private-uploads/
+/backups/
+/.env.production
 
 # Vite
 *.timestamp-*-*.mjs

@@ -54,7 +54,7 @@ watch(user, (value) => {
       </form>
       <div class="nav-links">
         <RouterLink to="/literature">文献目录</RouterLink
-        ><RouterLink to="/periods">历史时期</RouterLink
+        ><RouterLink to="/literature/political-subcategories">政论文书分期</RouterLink
         ><RouterLink to="/about-documents">文库制度</RouterLink>
         <RouterLink v-if="user" to="/submit">我要投稿</RouterLink
         ><RouterLink v-if="user" to="/submissions">投稿记录</RouterLink>

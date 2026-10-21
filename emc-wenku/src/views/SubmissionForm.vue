@@ -1,8 +1,8 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../services/apiClient'
-import { categories, periods } from '../utils/constants'
+import { api, apiUrl } from '../services/apiClient'
+import { categories, politicalSubcategories } from '../utils/constants'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,7 +11,7 @@ const form = reactive({
   title: '',
   authorName: '',
   category: '01',
-  period: '',
+  subcategory: '',
   summary: '',
   content: '',
   sourceDescription: '',
@@ -22,7 +22,34 @@ const accepted = ref(false)
 const message = ref('')
 const busy = ref(false)
 const allowedToEdit = ref(true)
+const attachments = ref([])
+const selectedFiles = ref([])
 const payload = () => ({ ...form })
+function chooseFiles(event) {
+  selectedFiles.value = Array.from(event.target.files ?? [])
+}
+async function uploadSelectedFiles() {
+  if (!selectedFiles.value.length) return
+  const data = new FormData()
+  selectedFiles.value.forEach((file) => data.append('files', file))
+  const uploaded = await api.upload(`/submissions/${submissionId.value}/attachments`, data)
+  attachments.value.push(...uploaded)
+  selectedFiles.value = []
+}
+async function removeAttachment(file) {
+  try {
+    await api.delete(`/submissions/${submissionId.value}/attachments/${file.id}`)
+    attachments.value = attachments.value.filter((item) => item.id !== file.id)
+  } catch (error) {
+    message.value = error.message
+  }
+}
+watch(
+  () => form.category,
+  (category) => {
+    if (category !== '04') form.subcategory = ''
+  },
+)
 async function saveDraft() {
   busy.value = true
   message.value = ''
@@ -33,6 +60,7 @@ async function saveDraft() {
     submissionId.value = saved.id
     if (route.params.id !== saved.id)
       router.replace({ name: 'submission-edit', params: { id: saved.id } })
+    await uploadSelectedFiles()
     message.value = `草稿已保存 · ${new Date(saved.updatedAt).toLocaleTimeString()}`
     return saved
   } catch (error) {
@@ -72,13 +100,14 @@ onMounted(async () => {
       title: existing.title,
       authorName: existing.authorName,
       category: existing.category,
-      period: existing.period,
+      subcategory: existing.subcategory,
       summary: existing.summary,
       content: existing.content,
       sourceDescription: existing.sourceDescription,
       sourceUrl: existing.sourceUrl,
       sourceDate: existing.sourceDate,
     })
+    attachments.value = existing.attachments ?? []
   } catch (error) {
     allowedToEdit.value = false
     message.value = error.message
@@ -109,10 +138,10 @@ onMounted(async () => {
               {{ item.id }} · {{ item.name }}
             </option>
           </select></label
-        ><label
-          >历史时期<select v-model="form.period">
+        ><label v-if="form.category === '04'"
+          >政论文书分期<select v-model="form.subcategory">
             <option value="">未确定</option>
-            <option v-for="item in periods" :key="item.id" :value="item.id">
+            <option v-for="item in politicalSubcategories" :key="item.id" :value="item.id">
               {{ item.id }} · {{ item.name }}
             </option>
           </select></label
@@ -126,8 +155,22 @@ onMounted(async () => {
       /></label>
       <label>摘要<textarea v-model.trim="form.summary" rows="3" maxlength="3000" /></label>
       <label
-        >文献正文<textarea v-model="form.content" rows="16" maxlength="500000" required />
+        >文献正文（可直接填写，也可上传附件）<textarea v-model="form.content" rows="16" maxlength="500000" />
       </label>
+      <section class="source-note attachment-editor">
+        <h2>文献附件</h2>
+        <p class="muted">支持 PDF、JPG、PNG、WebP、DOCX；每个文件最大 10 MB，每篇最多 10 个。</p>
+        <p class="muted">选择文件后，点击“保存草稿”或“提交审核”即可上传。</p>
+        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.docx" @change="chooseFiles" />
+        <p v-if="selectedFiles.length" class="muted">待上传：{{ selectedFiles.map((file) => file.name).join('、') }}</p>
+        <ul v-if="attachments.length">
+          <li v-for="file in attachments" :key="file.id">
+            <a :href="apiUrl(`/submissions/${submissionId}/attachments/${file.id}/file`)">{{ file.name }}</a>
+            · {{ (file.size / 1024 / 1024).toFixed(2) }} MB
+            <button class="button button-quiet" type="button" @click="removeAttachment(file)">删除</button>
+          </li>
+        </ul>
+      </section>
       <label
         >来源与真实性说明<textarea
           v-model.trim="form.sourceDescription"

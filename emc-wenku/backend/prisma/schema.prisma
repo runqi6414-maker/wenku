@@ -85,22 +85,27 @@ model Category {
   name        String       @db.VarChar(64)
   sortOrder   Int          @default(0) @map("sort_order")
   active      Boolean      @default(true)
-  literature  Literature[]
-  submissions Submission[]
+  subcategories Subcategory[]
+  literature    Literature[]
+  submissions   Submission[]
 
   @@map("categories")
 }
 
-model Period {
-  id          String       @id @default(uuid()) @db.Uuid
-  code        String       @unique @db.VarChar(2)
-  name        String       @db.VarChar(128)
-  sortOrder   Int          @default(0) @map("sort_order")
-  active      Boolean      @default(true)
-  literature  Literature[]
-  submissions Submission[]
+model Subcategory {
+  id               String       @id @default(uuid()) @db.Uuid
+  code             String       @db.VarChar(2)
+  parentCategoryId String       @map("parent_category_id") @db.Uuid
+  name             String       @db.VarChar(128)
+  sortOrder        Int          @default(0) @map("sort_order")
+  active           Boolean      @default(true)
+  parentCategory   Category     @relation(fields: [parentCategoryId], references: [id])
+  literature       Literature[]
+  submissions      Submission[]
 
-  @@map("periods")
+  @@unique([parentCategoryId, code])
+  @@index([parentCategoryId, sortOrder])
+  @@map("subcategories")
 }
 
 model Literature {
@@ -111,7 +116,7 @@ model Literature {
   authorName        String              @map("author_name") @db.VarChar(160)
   authorUserId      String?             @map("author_user_id") @db.Uuid
   categoryId        String              @map("category_id") @db.Uuid
-  periodId          String?             @map("period_id") @db.Uuid
+  subcategoryId     String?             @map("subcategory_id") @db.Uuid
   summary           String              @db.Text
   content           String              @db.Text
   sourceDescription String              @map("source_description") @db.Text
@@ -125,14 +130,15 @@ model Literature {
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
   category          Category            @relation(fields: [categoryId], references: [id])
-  period            Period?             @relation(fields: [periodId], references: [id])
+  subcategory       Subcategory?        @relation(fields: [subcategoryId], references: [id])
   versions          LiteratureVersion[]
   favorites         Favorite[]
   submissions       Submission[]
   views             PageViewEvent[]
+  attachments       LiteratureAttachment[]
 
   @@index([status, publishedAt])
-  @@index([categoryId, periodId])
+  @@index([categoryId, subcategoryId])
   @@map("literature")
 }
 
@@ -162,7 +168,7 @@ model Submission {
   title                 String              @db.VarChar(240)
   authorName            String              @map("author_name") @db.VarChar(160)
   categoryId            String              @map("category_id") @db.Uuid
-  periodId              String?             @map("period_id") @db.Uuid
+  subcategoryId         String?             @map("subcategory_id") @db.Uuid
   summary               String              @db.Text
   content               String              @db.Text
   sourceDescription     String              @map("source_description") @db.Text
@@ -178,10 +184,11 @@ model Submission {
   updatedAt             DateTime            @updatedAt @map("updated_at")
   submitter             User                @relation("Submitter", fields: [submitterId], references: [id])
   category              Category            @relation(fields: [categoryId], references: [id])
-  period                Period?             @relation(fields: [periodId], references: [id])
+  subcategory           Subcategory?        @relation(fields: [subcategoryId], references: [id])
   targetLiterature      Literature?         @relation(fields: [targetLiteratureId], references: [id])
   versions              SubmissionVersion[]
   reviews               ReviewRecord[]
+  attachments           LiteratureAttachment[]
 
   @@index([status, submittedAt])
   @@index([submitterId, updatedAt])
@@ -201,6 +208,23 @@ model SubmissionVersion {
 
   @@unique([submissionId, version])
   @@map("submission_versions")
+}
+
+model LiteratureAttachment {
+  id           String      @id @default(uuid()) @db.Uuid
+  submissionId String      @map("submission_id") @db.Uuid
+  literatureId String?     @map("literature_id") @db.Uuid
+  originalName String      @map("original_name") @db.VarChar(255)
+  storageKey   String      @unique @map("storage_key") @db.VarChar(80)
+  mediaType    String      @map("media_type") @db.VarChar(120)
+  size         Int
+  createdAt    DateTime    @default(now()) @map("created_at")
+  submission   Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  literature   Literature? @relation(fields: [literatureId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId, createdAt])
+  @@index([literatureId])
+  @@map("literature_attachments")
 }
 
 model ReviewRecord {

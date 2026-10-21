@@ -9,16 +9,19 @@ export class ApiError extends Error {
   }
 }
 
+export const apiUrl = (path) => `${baseUrl}${path}`
+
 export async function apiRequest(path, options = {}) {
   const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), 15000)
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const timer = window.setTimeout(() => controller.abort(), isFormData ? 120000 : 15000)
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
       credentials: 'include',
       signal: options.signal ?? controller.signal,
       headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers,
       },
     })
@@ -46,6 +49,7 @@ export const api = {
       method: 'POST',
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
+  upload: (path, formData) => apiRequest(path, { method: 'POST', body: formData }),
   patch: (path, body) => apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (path) => apiRequest(path, { method: 'DELETE' }),
 }

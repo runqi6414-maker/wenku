@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { categories, periods } from '../utils/constants'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { categories, politicalSubcategories } from '../utils/constants'
 import { api } from '../services/apiClient'
 const status = ref('PUBLISHED')
 const records = ref([])
@@ -11,7 +11,7 @@ const form = reactive({
   title: '',
   authorName: '',
   category: '',
-  period: '',
+  subcategory: '',
   summary: '',
   content: '',
   sourceDescription: '',
@@ -19,6 +19,12 @@ const form = reactive({
   sourceDate: '',
   changeNote: '',
 })
+watch(
+  () => form.category,
+  (category) => {
+    if (category !== '04') form.subcategory = ''
+  },
+)
 const statusLabel = computed(
   () => ({ PUBLISHED: '公开', WITHDRAWN: '已撤回', HIDDEN: '已隐藏' })[status.value],
 )
@@ -36,7 +42,7 @@ function edit(item) {
     title: item.title,
     authorName: item.author,
     category: item.category,
-    period: item.period || '',
+    subcategory: item.subcategory || '',
     summary: item.summary,
     content: item.content,
     sourceDescription: item.source?.description || '',
@@ -100,7 +106,7 @@ onMounted(load)
             <th>标题</th>
             <th>作者</th>
             <th>分类</th>
-            <th>时期</th>
+            <th>政论文书子分类</th>
             <th>浏览</th>
             <th>操作</th>
           </tr>
@@ -111,7 +117,7 @@ onMounted(load)
             <td>{{ item.title }}</td>
             <td>{{ item.author }}</td>
             <td>{{ categories.find((entry) => entry.id === item.category)?.name }}</td>
-            <td>{{ periods.find((entry) => entry.id === item.period)?.name || '未标注' }}</td>
+            <td>{{ politicalSubcategories.find((entry) => entry.id === item.subcategory)?.name || '—' }}</td>
             <td>{{ item.views }}</td>
             <td>
               <div class="row-actions">
@@ -161,10 +167,10 @@ onMounted(load)
               {{ item.name }}
             </option>
           </select></label
-        ><label
-          >时期<select v-model="form.period">
+        ><label v-if="form.category === '04'"
+          >政论文书分期<select v-model="form.subcategory">
             <option value="">未确定</option>
-            <option v-for="item in periods" :key="item.id" :value="item.id">{{ item.name }}</option>
+            <option v-for="item in politicalSubcategories" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select></label
         >
       </div>

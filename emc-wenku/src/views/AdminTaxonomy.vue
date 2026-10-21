@@ -3,9 +3,11 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/apiClient'
 const route = useRoute()
-const isPeriod = computed(() => route.path.endsWith('/periods'))
-const title = computed(() => (isPeriod.value ? '历史时期管理' : '文献分类管理'))
-const endpoint = computed(() => (isPeriod.value ? '/periods' : '/categories'))
+const isSubcategory = computed(() => route.path.endsWith('/political-subcategories'))
+const title = computed(() => (isSubcategory.value ? '政论文书子分类管理' : '文献分类管理'))
+const endpoint = computed(() =>
+  isSubcategory.value ? '/categories/04/subcategories' : '/categories',
+)
 const records = ref([])
 const error = ref('')
 const message = ref('')
@@ -21,7 +23,7 @@ async function save() {
   error.value = ''
   message.value = ''
   try {
-    await api.patch(`/admin/${isPeriod.value ? 'periods' : 'categories'}/${form.code}`, {
+    await api.patch(`/admin/${isSubcategory.value ? 'subcategories' : 'categories'}/${form.code}`, {
       name: form.name,
       sortOrder: Number(form.sortOrder),
       active: form.active,
@@ -60,7 +62,10 @@ watch(endpoint, load, { immediate: true })
       <div>
         <p class="eyebrow">TAXONOMY</p>
         <h1>{{ title }}</h1>
-        <p class="muted">停用目录项可保留已有文献关联，新增编号使用两位数字。</p>
+        <p class="muted">
+          {{ isSubcategory ? '这些子分类固定隶属于主分类 04「政论文书」，仅用于该类文献。' : '主分类用于所有文献编目。停用目录项可保留已有文献关联。' }}
+          新增编号使用两位数字。
+        </p>
       </div>
     </div>
     <form class="taxonomy-form" @submit.prevent="save">

@@ -1,0 +1,111 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: emc_wenku
+      POSTGRES_USER: emc_wenku
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - emc_wenku_production_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U emc_wenku -d emc_wenku']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: runtime
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: postgresql://emc_wenku:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/emc_wenku?schema=public
+      FRONTEND_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
+      ATTACHMENT_STORAGE_DIR: /app/private-uploads
+    volumes:
+      - emc_wenku_production_attachments:/app/private-uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data
+      - app
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      target: runtime
+      args:
+        VITE_API_BASE_URL: /api/v1
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app
+      - edge
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - emc_wenku_caddy_data:/data
+      - emc_wenku_caddy_config:/config
+    depends_on:
+      - web
+    networks:
+      - edge
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: ops
+    profiles: ['ops']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://emc_wenku:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}@postgres:5432/emc_wenku?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data
+
+volumes:
+  emc_wenku_production_postgres:
+  emc_wenku_production_attachments:
+  emc_wenku_caddy_data:
+  emc_wenku_caddy_config:
+
+networks:
+  data:
+    internal: true
+  app:
+    internal: true
+  edge:

@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+dist
+dist-ssr
+coverage
+.env*
+backend/.env*
+backend/dist
+backend/*.tsbuildinfo
+private-uploads
+local-data
+backups
+*.log

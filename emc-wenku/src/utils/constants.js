@@ -9,7 +9,7 @@ export const categories = [
   { id: '08', name: '声像资料' },
 ]
 
-export const periods = [
+export const politicalSubcategories = [
   { id: '01', name: '【Nova】早期拓荒与社群形成' },
   { id: '02', name: '【Aurora】开荒与建国' },
   { id: '03', name: '【Aurora】明联邦秩序' },
@@ -23,4 +23,5 @@ export const periods = [
 ]
 
 export const getCategoryName = (id) => categories.find((item) => item.id === id)?.name ?? '未分类'
-export const getPeriodName = (id) => periods.find((item) => item.id === id)?.name ?? '时期未标注'
+export const getSubcategoryName = (id) =>
+  politicalSubcategories.find((item) => item.id === id)?.name ?? ''

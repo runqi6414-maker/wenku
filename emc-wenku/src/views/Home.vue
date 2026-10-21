@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import LitCard from '../components/LitCard.vue'
 import Pagination from '../components/Pagination.vue'
 import SideBar from '../components/SideBar.vue'
-import { categories, periods } from '../utils/constants'
+import { categories, politicalSubcategories } from '../utils/constants'
 import { api } from '../services/apiClient'
 import { useAppStore } from '../store/useAppStore'
 
@@ -21,7 +21,7 @@ const {
   error,
 } = useAppStore()
 const selectedCategory = ref('')
-const selectedPeriod = ref('')
+const selectedSubcategory = ref('')
 const currentPage = ref(1)
 const totalCount = ref(0)
 const pageSize = 12
@@ -31,13 +31,13 @@ const popularItems = ref([])
 const showCatalogue = computed(() => route.path === '/literature')
 const paginatedList = computed(() => literatureList.value)
 const hasActiveFilters = computed(() =>
-  Boolean(searchKeyword.value.trim() || selectedCategory.value || selectedPeriod.value),
+  Boolean(searchKeyword.value.trim() || selectedCategory.value || selectedSubcategory.value),
 )
 const activeCategoryName = computed(
   () => categories.find((item) => item.id === selectedCategory.value)?.name ?? '',
 )
-const activePeriodName = computed(
-  () => periods.find((item) => item.id === selectedPeriod.value)?.name ?? '',
+const activeSubcategoryName = computed(
+  () => politicalSubcategories.find((item) => item.id === selectedSubcategory.value)?.name ?? '',
 )
 
 async function refreshList() {
@@ -48,7 +48,7 @@ async function refreshList() {
       pageSize,
       keyword: searchKeyword.value.trim(),
       categoryId: selectedCategory.value,
-      periodId: selectedPeriod.value,
+      subcategoryId: selectedSubcategory.value,
     })
     totalCount.value = result.total
   } catch {
@@ -62,7 +62,10 @@ watch(
   },
   { immediate: true },
 )
-watch([searchKeyword, selectedCategory, selectedPeriod], () => {
+watch(selectedCategory, (category) => {
+  if (category !== '04') selectedSubcategory.value = ''
+})
+watch([searchKeyword, selectedCategory, selectedSubcategory], () => {
   currentPage.value = 1
   if (showCatalogue.value) refreshList()
 })
@@ -93,7 +96,7 @@ watch(
 function clearFilters() {
   searchKeyword.value = ''
   selectedCategory.value = ''
-  selectedPeriod.value = ''
+  selectedSubcategory.value = ''
   filtersOpen.value = false
   if (route.query.q) router.replace({ name: 'home' })
 }
@@ -145,8 +148,8 @@ function clearFilters() {
           ><strong>{{ overviewLoaded ? overview.categoryCount : '—' }}</strong>
         </article>
         <article class="stat-card">
-          <span class="muted">历史时期</span
-          ><strong>{{ overviewLoaded ? overview.periodCount : '—' }}</strong>
+          <span class="muted">政论文书分期</span
+          ><strong>{{ overviewLoaded ? overview.subcategoryCount : '—' }}</strong>
         </article>
         <article class="stat-card">
           <span class="muted">累计浏览</span
@@ -190,15 +193,15 @@ function clearFilters() {
         :aria-expanded="filtersOpen"
         @click="filtersOpen = !filtersOpen"
       >
-        {{ filtersOpen ? '收起筛选' : '分类与时期筛选' }}
+        {{ filtersOpen ? '收起筛选' : '分类与政论文书分期筛选' }}
       </button>
       <SideBar
         id="home-filter-panel"
         :class="{ 'filter-panel-closed': !filtersOpen }"
         :selected-category="selectedCategory"
-        :selected-period="selectedPeriod"
+        :selected-subcategory="selectedSubcategory"
         @update:category="selectedCategory = $event"
-        @update:period="selectedPeriod = $event"
+        @update:subcategory="selectedSubcategory = $event"
       />
     </div>
     <div class="catalogue">
@@ -222,7 +225,7 @@ function clearFilters() {
       <div v-if="hasActiveFilters" class="active-filters" aria-label="当前筛选条件">
         <span v-if="searchKeyword.trim()" class="tag">搜索：{{ searchKeyword.trim() }}</span
         ><span v-if="activeCategoryName" class="tag">分类：{{ activeCategoryName }}</span
-        ><span v-if="activePeriodName" class="tag">时期：{{ activePeriodName }}</span>
+        ><span v-if="activeSubcategoryName" class="tag">政论文书分期：{{ activeSubcategoryName }}</span>
       </div>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <p v-if="loading" class="muted" role="status">正在读取正式馆藏…</p>
@@ -234,7 +237,7 @@ function clearFilters() {
         <p>
           {{
             hasActiveFilters
-              ? '请调整关键词、分类或时期后再试。'
+              ? '请调整关键词、主分类或政论文书子分类后再试。'
               : '正式馆藏由用户投稿并经审核后发布。开发环境目前未载入测试馆藏。'
           }}
         </p>

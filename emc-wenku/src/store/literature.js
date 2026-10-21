@@ -8,7 +8,7 @@ export const useLiteratureStore = defineStore('literature', () => {
   const favoriteItems = ref([])
   const loading = ref(false)
   const error = ref('')
-  const overview = ref({ literatureCount: 0, categoryCount: 8, periodCount: 10, viewCount: 0 })
+  const overview = ref({ literatureCount: 0, categoryCount: 8, subcategoryCount: 10, viewCount: 0 })
   const overviewLoaded = ref(false)
 
   async function loadLiterature(params = {}) {

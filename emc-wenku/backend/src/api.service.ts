@@ -21,12 +21,18 @@ const itemDto = (item: any) => ({
   title: item.title,
   author: item.authorName,
   category: item.category?.code,
-  period: item.period?.code ?? '',
+  subcategory: item.subcategory?.code ?? '',
   summary: item.summary,
   content: item.content,
   views: Number(item.viewCount),
   date: item.publishedAt?.toISOString().slice(0, 10) ?? '',
   source: { description: item.sourceDescription, url: item.sourceUrl ?? '' },
+  attachments: item.attachments?.map((file: any) => ({
+    id: file.id,
+    name: file.originalName,
+    mediaType: file.mediaType,
+    size: file.size,
+  })),
   status: item.status,
 })
 const submissionDto = (item: any) => ({
@@ -34,7 +40,7 @@ const submissionDto = (item: any) => ({
   title: item.title,
   authorName: item.authorName,
   category: item.category?.code,
-  period: item.period?.code ?? '',
+  subcategory: item.subcategory?.code ?? '',
   summary: item.summary,
   content: item.content,
   sourceDescription: item.sourceDescription,
@@ -46,6 +52,13 @@ const submissionDto = (item: any) => ({
   submittedAt: item.submittedAt,
   publishedLiteratureId: item.publishedLiteratureId,
   submitter: item.submitter ? publicUser(item.submitter) : undefined,
+  attachments: item.attachments?.map((file: any) => ({
+    id: file.id,
+    name: file.originalName,
+    mediaType: file.mediaType,
+    size: file.size,
+    createdAt: file.createdAt,
+  })),
   reviews: item.reviews?.map((review: any) => ({
     comment: review.comment,
     status: review.toStatus.toLowerCase(),
@@ -102,8 +115,13 @@ export class ApiService {
   async categories() {
     return this.prisma.category.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })
   }
-  async periods() {
-    return this.prisma.period.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })
+  async subcategories(categoryCode = '04') {
+    const parent = await this.prisma.category.findUnique({ where: { code: categoryCode } })
+    if (!parent) throw new NotFoundException('文献分类不存在')
+    return this.prisma.subcategory.findMany({
+      where: { parentCategoryId: parent.id, active: true },
+      orderBy: { sortOrder: 'asc' },
+    })
   }
 
   async literature(query: any) {
@@ -111,7 +129,15 @@ export class ApiService {
     const pageSize = Math.min(50, Math.max(1, Number(query.pageSize) || 12))
     const where: any = { status: 'PUBLISHED' }
     if (query.categoryId) where.category = { code: String(query.categoryId) }
-    if (query.periodId) where.period = { code: String(query.periodId) }
+    if (query.subcategoryId) {
+      if (query.categoryId && String(query.categoryId) !== '04')
+        throw new BadRequestException('十大分期仅适用于政论文书类文献')
+      const subcategory = await this.prisma.subcategory.findFirst({
+        where: { code: String(query.subcategoryId), parentCategory: { code: '04' }, active: true },
+      })
+      if (!subcategory) throw new BadRequestException('政论文书子分类无效')
+      where.subcategoryId = subcategory.id
+    }
     const keyword = String(query.keyword ?? '').trim()
     if (keyword)
       where.OR = ['title', 'authorName', 'summary', 'content', 'publicCode'].map((field) => ({
@@ -120,7 +146,7 @@ export class ApiService {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.literature.findMany({
         where,
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
         orderBy: { publishedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -135,7 +161,8 @@ export class ApiService {
       where: { OR: [{ id }, { publicCode: id }], status: 'PUBLISHED' },
       include: {
         category: true,
-        period: true,
+        subcategory: true,
+        attachments: true,
         versions: {
           orderBy: { version: 'desc' },
           select: { version: true, changeNote: true, createdAt: true },
@@ -157,10 +184,10 @@ export class ApiService {
   }
 
   async homeOverview() {
-    const [literatureCount, categoryCount, periodCount, viewCount] = await Promise.all([
+    const [literatureCount, categoryCount, subcategoryCount, viewCount] = await Promise.all([
       this.prisma.literature.count({ where: { status: 'PUBLISHED' } }),
       this.prisma.category.count({ where: { active: true } }),
-      this.prisma.period.count({ where: { active: true } }),
+      this.prisma.subcategory.count({ where: { active: true, parentCategory: { code: '04' } } }),
       this.prisma.literature.aggregate({
         where: { status: 'PUBLISHED' },
         _sum: { viewCount: true },
@@ -169,7 +196,7 @@ export class ApiService {
     return {
       literatureCount,
       categoryCount,
-      periodCount,
+      subcategoryCount,
       viewCount: Number(viewCount._sum.viewCount ?? 0),
     }
   }
@@ -177,7 +204,7 @@ export class ApiService {
   async recentLiterature() {
     const rows = await this.prisma.literature.findMany({
       where: { status: 'PUBLISHED' },
-      include: { category: true, period: true },
+      include: { category: true, subcategory: true },
       orderBy: { publishedAt: 'desc' },
       take: 6,
     })
@@ -190,7 +217,7 @@ export class ApiService {
     if (!ranked.length) return []
     const rows = await this.prisma.literature.findMany({
       where: { id: { in: ranked.map((item) => item.literature_id) }, status: 'PUBLISHED' },
-      include: { category: true, period: true },
+      include: { category: true, subcategory: true },
     })
     const byId = new Map(rows.map((row) => [row.id, row]))
     return ranked.flatMap(({ literature_id }) => {
@@ -203,11 +230,9 @@ export class ApiService {
     const category = await this.prisma.category.findUnique({
       where: { code: String(body.category ?? '') },
     })
-    const period = body.period
-      ? await this.prisma.period.findUnique({ where: { code: String(body.period) } })
-      : null
-    if (!category || (body.period && !period)) throw new BadRequestException('分类或时期无效')
-    const data = this.submissionData(body, category.id, period?.id ?? null)
+    if (!category) throw new BadRequestException('文献分类无效')
+    const subcategoryId = await this.resolveSubcategory(category.id, body.subcategory)
+    const data = this.submissionData(body, category.id, subcategoryId)
     return submissionDto(
       await this.prisma.$transaction(async (tx) => {
         const submission = await tx.submission.create({ data: { ...data, submitterId: user.id } })
@@ -222,7 +247,7 @@ export class ApiService {
         })
         return tx.submission.findUnique({
           where: { id: submission.id },
-          include: { category: true, period: true },
+          include: { category: true, subcategory: true, attachments: true },
         })
       }),
     )
@@ -233,7 +258,8 @@ export class ApiService {
       where: { submitterId: user.id },
       include: {
         category: true,
-        period: true,
+        subcategory: true,
+        attachments: true,
         reviews: { include: { reviewer: true }, orderBy: { createdAt: 'desc' } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -246,7 +272,8 @@ export class ApiService {
       where: { id },
       include: {
         category: true,
-        period: true,
+        subcategory: true,
+        attachments: true,
         submitter: true,
         reviews: { include: { reviewer: true }, orderBy: { createdAt: 'desc' } },
         versions: { orderBy: { version: 'desc' } },
@@ -265,11 +292,9 @@ export class ApiService {
     const category = await this.prisma.category.findUnique({
       where: { code: String(body.category ?? '') },
     })
-    const period = body.period
-      ? await this.prisma.period.findUnique({ where: { code: String(body.period) } })
-      : null
-    if (!category || (body.period && !period)) throw new BadRequestException('分类或时期无效')
-    const data = this.submissionData(body, category.id, period?.id ?? null)
+    if (!category) throw new BadRequestException('文献分类无效')
+    const subcategoryId = await this.resolveSubcategory(category.id, body.subcategory)
+    const data = this.submissionData(body, category.id, subcategoryId)
     return this.saveSubmissionVersion(id, user.id, data, String(body.changeNote ?? '修改投稿'))
   }
 
@@ -279,12 +304,13 @@ export class ApiService {
     if (!['DRAFT', 'REVISION_REQUESTED'].includes(current.status))
       throw new BadRequestException('当前状态不允许提交审核')
     if (!declarationAccepted) throw new BadRequestException('请先确认投稿声明')
-    if (!current.title || !current.authorName || !current.content || !current.sourceDescription)
-      throw new BadRequestException('标题、作者、正文与来源说明为必填项')
+    const attachmentCount = await this.prisma.literatureAttachment.count({ where: { submissionId: id } })
+    if (!current.title || !current.authorName || (!current.content && !attachmentCount) || !current.sourceDescription)
+      throw new BadRequestException('标题、作者、正文或至少一个附件、来源说明为必填项')
     const updated = await this.prisma.submission.update({
       where: { id },
       data: { status: 'PENDING', submittedAt: new Date(), declarationAcceptedAt: new Date() },
-      include: { category: true, period: true },
+      include: { category: true, subcategory: true },
     })
     await this.prisma.auditLog.create({
       data: {
@@ -306,7 +332,7 @@ export class ApiService {
       await this.prisma.submission.update({
         where: { id },
         data: { status: 'WITHDRAWN' },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       }),
     )
   }
@@ -329,7 +355,7 @@ export class ApiService {
     return (
       await this.prisma.submission.findMany({
         where,
-        include: { category: true, period: true, submitter: true },
+        include: { category: true, subcategory: true, submitter: true, attachments: true },
         orderBy: { submittedAt: 'asc' },
       })
     ).map((row) => ({
@@ -351,7 +377,7 @@ export class ApiService {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.literature.findMany({
         where,
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
         orderBy: { updatedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -364,17 +390,15 @@ export class ApiService {
   async reviseLiterature(id: string, actor: any, body: any) {
     const current = await this.prisma.literature.findUnique({
       where: { id },
-      include: { category: true, period: true },
+      include: { category: true, subcategory: true },
     })
     if (!current) throw new NotFoundException('文献不存在')
     const category = await this.prisma.category.findUnique({
       where: { code: String(body.category ?? '') },
     })
-    const period = body.period
-      ? await this.prisma.period.findUnique({ where: { code: String(body.period) } })
-      : null
-    if (!category || (body.period && !period)) throw new BadRequestException('分类或时期无效')
-    const data = this.submissionData(body, category.id, period?.id ?? null)
+    if (!category) throw new BadRequestException('文献分类无效')
+    const subcategoryId = await this.resolveSubcategory(category.id, body.subcategory)
+    const data = this.submissionData(body, category.id, subcategoryId)
     const changeNote = String(body.changeNote ?? '').trim()
     if (!changeNote) throw new BadRequestException('修订正式文献时必须填写修订说明')
     return this.prisma.$transaction(async (tx) => {
@@ -386,7 +410,7 @@ export class ApiService {
       const updated = await tx.literature.update({
         where: { id },
         data: { ...recordData, createdAtSource: sourceDate },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       })
       await tx.literatureVersion.create({
         data: {
@@ -449,7 +473,7 @@ export class ApiService {
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.submission.findUnique({
         where: { id },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       })
       if (!current) throw new NotFoundException('投稿不存在')
       if (!['PENDING', 'IN_REVIEW'].includes(current.status))
@@ -457,7 +481,7 @@ export class ApiService {
       const updated = await tx.submission.update({
         where: { id },
         data: { status: target, reviewerId: reviewer.id, reviewedAt: new Date() },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       })
       await tx.reviewRecord.create({
         data: {
@@ -485,7 +509,7 @@ export class ApiService {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.submission.findUnique({
         where: { id },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       })
       if (!row || row.status !== 'APPROVED')
         throw new BadRequestException('仅审核通过的投稿可以发布')
@@ -496,7 +520,7 @@ export class ApiService {
           title: row.title,
           authorName: row.authorName,
           categoryId: row.categoryId,
-          periodId: row.periodId,
+          subcategoryId: row.subcategoryId,
           summary: row.summary,
           content: row.content,
           sourceDescription: row.sourceDescription,
@@ -514,7 +538,7 @@ export class ApiService {
                 title: row.title,
                 authorName: row.authorName,
                 categoryId: row.categoryId,
-                periodId: row.periodId,
+                subcategoryId: row.subcategoryId,
                 summary: row.summary,
                 content: row.content,
                 sourceDescription: row.sourceDescription,
@@ -530,6 +554,10 @@ export class ApiService {
       const updated = await tx.submission.update({
         where: { id },
         data: { status: 'PUBLISHED', publishedLiteratureId: literature.id },
+      })
+      await tx.literatureAttachment.updateMany({
+        where: { submissionId: id },
+        data: { literatureId: literature.id },
       })
       await tx.auditLog.create({
         data: {
@@ -547,7 +575,7 @@ export class ApiService {
   async favorites(user: any) {
     const rows = await this.prisma.favorite.findMany({
       where: { userId: user.id, literature: { status: 'PUBLISHED' } },
-      include: { literature: { include: { category: true, period: true } } },
+      include: { literature: { include: { category: true, subcategory: true } } },
       orderBy: { createdAt: 'desc' },
     })
     return rows.map((row) => itemDto(row.literature))
@@ -599,29 +627,35 @@ export class ApiService {
     return doc
   }
 
-  async upsertTaxonomy(kind: 'category' | 'period', code: string, body: any, actor: any) {
+  async upsertTaxonomy(kind: 'category' | 'subcategory', code: string, body: any, actor: any) {
     if (!/^\d{2}$/.test(code) || typeof body.name !== 'string' || !body.name.trim())
       throw new BadRequestException('编号或名称无效')
-    const model: any = kind === 'category' ? this.prisma.category : this.prisma.period
-    const saved = await model.upsert({
-      where: { code },
-      update: {
-        name: body.name.trim(),
-        sortOrder: Number(body.sortOrder) || 0,
-        active: body.active !== false,
-      },
-      create: {
-        code,
-        name: body.name.trim(),
-        sortOrder: Number(body.sortOrder) || 0,
-        active: body.active !== false,
-      },
-    })
+    const data = {
+      name: body.name.trim(),
+      sortOrder: Number(body.sortOrder) || 0,
+      active: body.active !== false,
+    }
+    let saved: any
+    if (kind === 'category') {
+      saved = await this.prisma.category.upsert({
+        where: { code },
+        update: data,
+        create: { code, ...data },
+      })
+    } else {
+      const parent = await this.prisma.category.findUnique({ where: { code: '04' } })
+      if (!parent) throw new NotFoundException('政论文书主分类不存在')
+      saved = await this.prisma.subcategory.upsert({
+        where: { parentCategoryId_code: { parentCategoryId: parent.id, code } },
+        update: data,
+        create: { parentCategoryId: parent.id, code, ...data },
+      })
+    }
     await this.prisma.auditLog.create({
       data: {
         actorId: actor.id,
         action: `${kind.toUpperCase()}_UPSERT`,
-        entityType: kind,
+        entityType: kind === 'subcategory' ? 'political_subcategory' : kind,
         entityId: saved.id,
         details: { code, name: saved.name, active: saved.active },
       },
@@ -790,12 +824,12 @@ export class ApiService {
       })
       const row = await tx.submission.findUnique({
         where: { id },
-        include: { category: true, period: true },
+        include: { category: true, subcategory: true },
       })
       return { ...submissionDto(row), latestVersion: version.version }
     })
   }
-  private submissionData(body: any, categoryId: string, periodId: string | null) {
+  private submissionData(body: any, categoryId: string, subcategoryId: string | null) {
     for (const field of ['title', 'authorName', 'summary', 'content', 'sourceDescription'])
       if (typeof body[field] !== 'string') throw new BadRequestException(`字段 ${field} 格式无效`)
     if (body.title.length > 240 || body.content.length > 500000)
@@ -806,13 +840,25 @@ export class ApiService {
       title: body.title.trim(),
       authorName: body.authorName.trim(),
       categoryId,
-      periodId,
+      subcategoryId,
       summary: body.summary.trim(),
       content: body.content,
       sourceDescription: body.sourceDescription.trim(),
       sourceUrl: body.sourceUrl || null,
       sourceDate: body.sourceDate || null,
     }
+  }
+  private async resolveSubcategory(categoryId: string, code: unknown) {
+    if (!code) return null
+    const category = await this.prisma.category.findUnique({ where: { id: categoryId } })
+    if (category?.code !== '04')
+      throw new BadRequestException('十大分期仅适用于政论文书类文献')
+    const subcategory = await this.prisma.subcategory.findUnique({
+      where: { parentCategoryId_code: { parentCategoryId: categoryId, code: String(code) } },
+    })
+    if (!subcategory || !subcategory.active)
+      throw new BadRequestException('政论文书子分类无效或已停用')
+    return subcategory.id
   }
   private async startSession(user: any) {
     const token = randomBytes(32).toString('base64url')

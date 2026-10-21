@@ -10,10 +10,19 @@ import {
   Req,
   Res,
   UseGuards,
+  UseInterceptors,
+  UploadedFiles,
+  StreamableFile,
 } from '@nestjs/common'
+import { FilesInterceptor } from '@nestjs/platform-express'
+import { diskStorage } from 'multer'
+import { mkdirSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
 import { ApiService } from './api.service'
 import { AuthGuard, CurrentUser, Roles, RolesGuard } from './security'
+import { AttachmentsService } from './attachments.service'
 
 class RegisterDto {
   @IsString() @MinLength(3) @MaxLength(32) username!: string
@@ -28,7 +37,7 @@ class SubmissionDto {
   @IsString() @MaxLength(240) title!: string
   @IsString() @MaxLength(160) authorName!: string
   @IsString() @MaxLength(2) category!: string
-  @IsOptional() @IsString() @MaxLength(2) period?: string
+  @IsOptional() @IsString() @MaxLength(2) subcategory?: string
   @IsString() @MaxLength(3000) summary!: string
   @IsString() @MaxLength(500000) content!: string
   @IsString() @MaxLength(3000) sourceDescription!: string
@@ -39,7 +48,14 @@ class SubmissionDto {
 
 @Controller()
 export class ApiController {
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private attachments: AttachmentsService) {}
+
+  private asFile(file: any) {
+    return new StreamableFile(file.stream, {
+      type: file.mediaType,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    })
+  }
 
   @Get('health') health() {
     return { status: 'ok' }
@@ -68,8 +84,10 @@ export class ApiController {
   @Get('categories') categories() {
     return this.api.categories()
   }
-  @Get('periods') periods() {
-    return this.api.periods()
+  @Get('categories/:categoryCode/subcategories') subcategories(
+    @Param('categoryCode') categoryCode: string,
+  ) {
+    return this.api.subcategories(categoryCode)
   }
   @Get('literature') literature(@Query() query: any) {
     return this.api.literature(query)
@@ -105,12 +123,12 @@ export class ApiController {
   ) {
     return this.api.upsertTaxonomy('category', code, body, user)
   }
-  @Patch('admin/periods/:code') @UseGuards(AuthGuard, RolesGuard) @Roles('ADMIN') updatePeriod(
+  @Patch('admin/subcategories/:code') @UseGuards(AuthGuard, RolesGuard) @Roles('ADMIN') updateSubcategory(
     @Param('code') code: string,
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
-    return this.api.upsertTaxonomy('period', code, body, user)
+    return this.api.upsertTaxonomy('subcategory', code, body, user)
   }
 
   @Post('submissions') @UseGuards(AuthGuard) createSubmission(
@@ -118,6 +136,51 @@ export class ApiController {
     @Body() body: SubmissionDto,
   ) {
     return this.api.createSubmission(user, body)
+  }
+  @Post('submissions/:id/attachments')
+  @UseGuards(AuthGuard)
+  @UseInterceptors(FilesInterceptor('files', 5, {
+    storage: diskStorage({
+      destination: (_req, _file, callback) => {
+        const directory = resolve(process.env.ATTACHMENT_STORAGE_DIR ?? './private-uploads')
+        mkdirSync(directory, { recursive: true, mode: 0o700 })
+        callback(null, directory)
+      },
+      filename: (_req, _file, callback) => callback(null, randomUUID()),
+    }),
+    limits: { files: 5, fileSize: 10 * 1024 * 1024 },
+  }))
+  uploadSubmissionAttachments(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @UploadedFiles() files: any[],
+  ) {
+    return this.attachments.upload(user, id, files)
+  }
+  @Get('submissions/:id/attachments/:attachmentId/file')
+  @UseGuards(AuthGuard)
+  async privateSubmissionAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.asFile(await this.attachments.privateFile(user, id, attachmentId))
+  }
+  @Delete('submissions/:id/attachments/:attachmentId')
+  @UseGuards(AuthGuard)
+  removeSubmissionAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.attachments.remove(user, id, attachmentId)
+  }
+  @Get('literature/:id/attachments/:attachmentId/file')
+  async publicLiteratureAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.asFile(await this.attachments.publicFile(id, attachmentId))
   }
   @Get('submissions/mine') @UseGuards(AuthGuard) mySubmissions(@CurrentUser() user: any) {
     return this.api.mySubmissions(user)

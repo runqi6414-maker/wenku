@@ -1,7 +1,7 @@
 <script setup>
 import { useAppStore } from '../store/useAppStore'
 import { useRouter } from 'vue-router'
-import { getCategoryName, getPeriodName } from '../utils/constants'
+import { getCategoryName, getSubcategoryName } from '../utils/constants'
 
 const props = defineProps({ litItem: { type: Object, required: true } })
 const { favorites, toggleFavorite } = useAppStore()
@@ -20,7 +20,7 @@ async function favorite(id) {
   <article class="literature-card">
     <div class="tag-row">
       <span class="tag">{{ getCategoryName(litItem.category) }}</span
-      ><span class="tag">{{ getPeriodName(litItem.period) }}</span>
+      ><span v-if="litItem.subcategory" class="tag">{{ getSubcategoryName(litItem.subcategory) }}</span>
     </div>
     <h2>
       <RouterLink :to="`/literature/${litItem.id}`">{{ litItem.title }}</RouterLink>

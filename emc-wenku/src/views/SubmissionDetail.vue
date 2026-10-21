@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { api } from '../services/apiClient'
+import { api, apiUrl } from '../services/apiClient'
 
 const route = useRoute()
 const item = ref(null)
@@ -45,6 +45,13 @@ watch(
       <p>{{ item.sourceDescription || '暂未填写' }}</p>
     </div>
     <pre class="article-content">{{ item.content }}</pre>
+    <section v-if="item.attachments?.length" class="source-note">
+      <h2>投稿附件</h2>
+      <ul><li v-for="file in item.attachments" :key="file.id">
+        <a :href="apiUrl(`/submissions/${item.id}/attachments/${file.id}/file`)">{{ file.name }}</a>
+        · {{ (file.size / 1024 / 1024).toFixed(2) }} MB
+      </li></ul>
+    </section>
     <div v-if="item.reviews?.length" class="source-note">
       <h2>审核记录</h2>
       <ol>

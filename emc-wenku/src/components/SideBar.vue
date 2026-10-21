@@ -1,12 +1,12 @@
 <script setup>
-import { categories, periods } from '../utils/constants'
+import { categories, politicalSubcategories } from '../utils/constants'
 
 defineProps({
   selectedCategory: { type: String, default: '' },
-  selectedPeriod: { type: String, default: '' },
+  selectedSubcategory: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update:category', 'update:period'])
+const emit = defineEmits(['update:category', 'update:subcategory'])
 </script>
 
 <template>
@@ -32,23 +32,24 @@ const emit = defineEmits(['update:category', 'update:period'])
         {{ item.name }}
       </button>
     </section>
-    <section>
-      <h2>历史时期</h2>
+    <section v-if="selectedCategory === '04'">
+      <h2>政论文书分期</h2>
+      <p class="muted">仅适用于政论文书类文献</p>
       <button
         type="button"
         class="filter-option"
-        :aria-pressed="!selectedPeriod"
-        @click="emit('update:period', '')"
+        :aria-pressed="!selectedSubcategory"
+        @click="emit('update:subcategory', '')"
       >
-        全部时期
+        全部分期
       </button>
       <button
-        v-for="item in periods"
+        v-for="item in politicalSubcategories"
         :key="item.id"
         type="button"
         class="filter-option"
-        :aria-pressed="selectedPeriod === item.id"
-        @click="emit('update:period', item.id)"
+        :aria-pressed="selectedSubcategory === item.id"
+        @click="emit('update:subcategory', item.id)"
       >
         {{ item.name }}
       </button>

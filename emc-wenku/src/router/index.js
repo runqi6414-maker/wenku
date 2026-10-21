@@ -62,11 +62,20 @@ const router = createRouter({
       component: () => import('../views/SubmissionForm.vue'),
       meta: { requiresAuth: true },
     },
-    { path: '/periods', name: 'periods', component: () => import('../views/Periods.vue') },
+    {
+      path: '/literature/political-subcategories',
+      name: 'political-subcategories',
+      component: () => import('../views/Periods.vue'),
+    },
+    {
+      path: '/literature/political-subcategories/:id',
+      name: 'political-subcategory-detail',
+      component: () => import('../views/PeriodDetail.vue'),
+    },
+    { path: '/periods', redirect: { name: 'political-subcategories' } },
     {
       path: '/periods/:id',
-      name: 'period-detail',
-      component: () => import('../views/PeriodDetail.vue'),
+      redirect: (to) => ({ name: 'political-subcategory-detail', params: { id: to.params.id } }),
     },
     {
       path: '/about-documents',
@@ -97,11 +106,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN'] },
     },
     {
-      path: '/admin/periods',
-      name: 'admin-periods',
+      path: '/admin/political-subcategories',
+      name: 'admin-political-subcategories',
       component: () => import('../views/AdminTaxonomy.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN'] },
     },
+    { path: '/admin/periods', redirect: { name: 'admin-political-subcategories' } },
     {
       path: '/admin/meta-documents',
       name: 'admin-meta-documents',
