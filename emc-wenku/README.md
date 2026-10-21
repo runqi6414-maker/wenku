@@ -68,13 +68,23 @@ npm run build
    chmod 600 .env.production
    ```
 
-   设置 `POSTGRES_PASSWORD` 为随机 64 位十六进制密钥；之后再将 `SITE_ADDRESS` 替换为最终域名。`.env.production` 已被 Git 忽略。域名未确定前不要启动 Caddy 公网服务。2 GB 内存实例构建镜像容易内存不足，低配服务器可先在本地或 CI 构建镜像再推送到镜像仓库；`--parallel 1` 可减少并行构建的峰值内存。
+   设置 `POSTGRES_PASSWORD` 为随机 64 位十六进制密钥；之后再将 `SITE_ADDRESS` 替换为最终域名。`.env.production` 已被 Git 忽略。域名未确定前不要启动 Caddy 公网服务。2 GB 内存实例构建镜像容易内存不足，按下方步骤在本地构建并通过 SSH/SCP 传输镜像包即可，无需依赖服务器访问 Docker Hub 或购买镜像加速服务。
 
-2. 构建镜像并启动数据库：
+2. 在本地安装了 Docker 的开发电脑上构建并打包 Linux/amd64 镜像。这样可避免低内存服务器构建镜像。使用仓库提供的示例环境文件即可构建；示例密码不会写入镜像：
 
    ```sh
-   docker compose --parallel 1 --env-file .env.production -f compose.production.yml build
-   docker compose --env-file .env.production -f compose.production.yml up -d postgres
+   docker compose --parallel 1 --env-file deploy/production.env.example -f compose.production.yml build
+   docker pull postgres:17-alpine
+   docker pull caddy:2-alpine
+   docker save -o emc-wenku.images.tar emc-wenku-api:production emc-wenku-web:production emc-wenku-migrate:production postgres:17-alpine caddy:2-alpine
+   ```
+
+   将 `emc-wenku.images.tar` 通过 SSH/SCP 传到服务器项目目录 `/opt/wenku/emc-wenku/`，然后在服务器该目录执行 `docker load -i emc-wenku.images.tar`。镜像包较大，不要提交到 Git。Docker Compose 配置使用固定镜像名和 `pull_policy: never`，只运行已加载的本地镜像，不会尝试访问 Docker Hub。
+
+   在服务器项目目录中确认 `.env.production` 已设置随机数据库密码后，启动数据库：
+
+   ```sh
+   docker compose --env-file .env.production -f compose.production.yml up -d --no-build postgres
    ```
 
 3. 应用生产数据库迁移，并初始化分类字典：

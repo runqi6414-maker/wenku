@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
+    pull_policy: never
     restart: unless-stopped
     environment:
       POSTGRES_DB: emc_wenku
@@ -17,6 +18,8 @@ services:
       - data
 
   api:
+    image: emc-wenku-api:production
+    pull_policy: never
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -50,6 +53,8 @@ services:
       - app
 
   web:
+    image: emc-wenku-web:production
+    pull_policy: never
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -66,6 +71,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    pull_policy: never
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
@@ -83,6 +89,8 @@ services:
       - edge
 
   migrate:
+    image: emc-wenku-migrate:production
+    pull_policy: never
     build:
       context: .
       dockerfile: Dockerfile.api

@@ -48,6 +48,7 @@ local-data/
 /private-uploads/
 /backups/
 /.env.production
+/*.images.tar
 
 # Vite
 *.timestamp-*-*.mjs
